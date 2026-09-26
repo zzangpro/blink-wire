@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: BLINK Wire
+  version: "1"
+  summary: Pull API for Korean and US public-sector news, delivered as IPTC ninjs 2.1.
+  description: |
+    Publishers call this API when they want material; nothing is pushed. Listing what is
+    available is free — only fetching a full document is metered, and only the first time a
+    given key takes a given article.
+
+    Access: email contact@blinkhub.net. Details: https://blinkhub.net/en/korean-news-api
+  contact:
+    name: BlinkHub
+    email: contact@blinkhub.net
+    url: https://blinkhub.net/en/korean-news-api
+  license:
+    name: Proprietary — content licensed per agreement
+servers:
+  - url: https://wire.blinkhub.net
+security:
+  - ApiKeyAuth: []
+paths:
+  /api/wire/v1/health:
+    get:
+      summary: Liveness
+      description: No authentication required.
+      security: []
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, examples: ["ok"] }
+                  service: { type: string, examples: ["blink-wire"] }
+                  version: { type: string, examples: ["1"] }
+  /api/wire/v1/me:
+    get:
+      summary: Account, rate and balance
+      operationId: getMe
+      responses:
+        "200":
+          description: Your account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: { type: string }
+                  country: { type: [string, "null"] }
+                  status: { type: string, examples: ["active"] }
+                  credits: { type: integer, description: Remaining balance. }
+                  price_per_article: { type: integer }
+                  articles_taken: { type: integer }
+                  credits_spent: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/wire/v1/articles:
+    get:
+      summary: List what is available
+      description: Free. Returns metadata only — no article body.
+      operationId: listArticles
+      parameters:
+        - name: market
+          in: query
+          description: Feed to read. Only markets enabled on your key are accepted.
+          schema: { type: string, default: us, examples: ["us"] }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: since
+          in: query
+          description: >
+            ISO 8601 timestamp. Returns only items received after it, so a scheduled job can
+            ask for just what is new.
+          schema: { type: string, examples: ["2026-09-01T00:00:00"] }
+      responses:
+        "200":
+          description: Available items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  market: { type: string }
+                  count: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ArticleSummary" }
+        "400": { $ref: "#/components/responses/UnknownMarket" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/wire/v1/articles/{id}:
+    get:
+      summary: Fetch one full document
+      description: |
+        Billed once per article per key. Fetching an article this key has already taken is
+        free and does not decrement the balance.
+      operationId: getArticle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: market
+          in: query
+          schema: { type: string, default: us }
+        - name: lang
+          in: query
+          description: Value written into the ninjs `language` field.
+          schema: { type: string, default: en }
+      responses:
+        "200":
+          description: An IPTC ninjs 2.1 document
+          headers:
+            X-Wire-Credits-Charged:
+              description: 0 if this key had already taken the article.
+              schema: { type: integer }
+            X-Wire-Credits-Balance:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NinjsDocument" }
+        "400": { $ref: "#/components/responses/UnknownMarket" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402":
+          description: Balance is below the per-article rate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No such article, or it is not cleared for distribution.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Failed the quality gate. Not billed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Transient failure. Retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  responses:
+    Unauthorized:
+      description: Missing, unknown or suspended key.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnknownMarket:
+      description: That market is not enabled for you.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                [
+                  unauthorized,
+                  unknown_market,
+                  insufficient_credits,
+                  not_found,
+                  not_distributable,
+                  internal_error,
+                ]
+            message: { type: string }
+    ArticleSummary:
+      type: object
+      properties:
+        uri: { type: string, examples: ["urn:blink:wire:us:48211"] }
+        id: { type: string }
+        headline: { type: string }
+        description_text: { type: [string, "null"] }
+        source: { type: [string, "null"], description: Issuing body. }
+        versioncreated: { type: string }
+        has_image: { type: boolean }
+        body_chars: { type: integer }
+        already_taken:
+          type: boolean
+          description: True if this key has fetched it before — re-fetching is free.
+    NinjsDocument:
+      type: object
+      description: >
+        IPTC ninjs 2.1. Fields outside the standard are grouped under `x_blink` so a
+        standards-compliant consumer can ignore them. Null fields are omitted.
+      properties:
+        uri: { type: string }
+        version: { type: integer }
+        type: { type: string, examples: ["text"] }
+        language: { type: string }
+        urgency: { type: integer }
+        firstcreated: { type: string }
+        versioncreated: { type: string }
+        pubstatus: { type: string, examples: ["usable"] }
+        headline: { type: string }
+        description_text: { type: string }
+        body_text: { type: string }
+        byline: { type: string }
+        source: { type: string }
+        copyrightnotice: { type: string }
+        usageterms: { type: string }
+        genre:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              code: { type: string }
+        associations:
+          type: object
+          properties:
+            featuremedia:
+              type: object
+              properties:
+                type: { type: string, examples: ["picture"] }
+                headline: { type: string }
+                description_text: { type: string }
+                creditline: { type: string }
+                copyrightnotice: { type: string }
+                renditions:
+                  type: object
+                  properties:
+                    original:
+                      type: object
+                      properties:
+                        href: { type: string }
+        links:
+          type: array
+          items:
+            type: object
+            properties:
+              rel: { type: string, examples: ["canonical"] }
+              href: { type: string }
+        x_blink:
+          type: object
+          properties:
+            article_id: { type: string }
+            market: { type: string }
+            provider: { type: [string, "null"] }
+            quality_grade: { type: [string, "null"] }
