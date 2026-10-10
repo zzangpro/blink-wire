@@ -2,8 +2,8 @@
 
 Government press releases from six markets, ready to run: the United States, Korea, the
 United Kingdom, the European Union, New Zealand and Australia. Pull them over a REST API as
-[IPTC ninjs 2.1](https://www.iptc.org/std/ninjs/), or connect an AI assistant such as Claude
-through the **MCP server** and let it search and read them for you.
+[IPTC ninjs 2.1](https://www.iptc.org/std/ninjs/), or connect an AI assistant through the
+**MCP server** and let it search and read them for you.
 
 **Base URL** `https://wire.blinkhub.net` · **MCP** `https://wire.blinkhub.net/mcp`
 · **Auth** `X-Api-Key` header · **Free tier** 100 full articles a month
