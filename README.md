@@ -30,12 +30,14 @@ terms do not allow commercial redistribution are left out of the feed.
 
 ## Getting a key
 
-1. Create a free account at <https://blinkhub.net/en/publishers/join>.
-2. In the portal, open **Wire**, add your site and verify it (a meta tag or a text file).
-3. Copy your key. It is shown once; you can rotate it from the same screen.
+1. Register your publication at <https://blinkhub.net/en/publishers/join> (free account).
+2. In the portal, open **Wire**: add your site, fill in your publication details, agree to the
+   terms and verify the site (a meta tag or a text file).
+3. We review and approve the publication, and you are emailed when it is approved.
+4. Copy your key from the portal. It is shown once; you can rotate it from the same screen.
 
-The free tier covers 100 full articles a month. For more, or for help connecting a CMS, ask
-from the portal or write to **contact@blinkhub.net**.
+The free tier covers 100 full articles a month. For higher volumes, write to
+**contact@blinkhub.net**.
 
 ## Use it from an AI assistant (MCP)
 
