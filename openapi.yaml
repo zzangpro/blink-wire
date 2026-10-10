@@ -1,14 +1,16 @@
 openapi: 3.1.0
 info:
-  title: BLINK Wire
+  title: BlinkHub Wire
   version: "1"
-  summary: Pull API for Korean and US public-sector news, delivered as IPTC ninjs 2.1.
+  summary: Pull API for government press releases from six markets (us, kr, gb, eu, nz, au), delivered as IPTC ninjs 2.1.
   description: |
     Publishers call this API when they want material; nothing is pushed. Listing what is
     available is free — only fetching a full document is metered, and only the first time a
     given key takes a given article.
 
-    Access: email contact@blinkhub.net. Details: https://blinkhub.net/en/korean-news-api
+    Free tier: 100 full articles a month. Get a key: https://blinkhub.net/en/publishers/join
+    An MCP server for AI assistants is at https://wire.blinkhub.net/mcp (same key, X-Api-Key header).
+    Details: https://blinkhub.net/en/korean-news-api
   contact:
     name: BlinkHub
     email: contact@blinkhub.net
@@ -65,8 +67,8 @@ paths:
       parameters:
         - name: market
           in: query
-          description: Feed to read. Only markets enabled on your key are accepted.
-          schema: { type: string, default: us, examples: ["us"] }
+          description: Feed to read.
+          schema: { type: string, default: us, enum: [us, kr, gb, eu, nz, au] }
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
@@ -105,7 +107,7 @@ paths:
           schema: { type: string }
         - name: market
           in: query
-          schema: { type: string, default: us }
+          schema: { type: string, default: us, enum: [us, kr, gb, eu, nz, au] }
         - name: lang
           in: query
           description: Value written into the ninjs `language` field.
@@ -125,7 +127,7 @@ paths:
         "400": { $ref: "#/components/responses/UnknownMarket" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "402":
-          description: Balance is below the per-article rate.
+          description: Free tier quota used up this month (quota_exceeded), or paid balance below the per-article rate (insufficient_credits).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -157,7 +159,7 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     UnknownMarket:
-      description: That market is not enabled for you.
+      description: Unknown market.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -174,6 +176,7 @@ components:
                 [
                   unauthorized,
                   unknown_market,
+                  quota_exceeded,
                   insufficient_credits,
                   not_found,
                   not_distributable,

@@ -1,39 +1,100 @@
-# BLINK Wire — news content API
+# BlinkHub Wire — government news API and MCP server
 
-A pull API for publishers who want Korean and US public-sector news without running a
-local desk. You call the endpoint when you want material; each full article you take is
-metered once. Documents come back as [IPTC ninjs 2.1](https://www.iptc.org/std/ninjs/).
+Government press releases from six markets, ready to run: the United States, Korea, the
+United Kingdom, the European Union, New Zealand and Australia. Pull them over a REST API as
+[IPTC ninjs 2.1](https://www.iptc.org/std/ninjs/), or connect an AI assistant such as Claude
+through the **MCP server** and let it search and read them for you.
 
-**Base URL** `https://wire.blinkhub.net` · **Auth** `X-Api-Key` header
-· **Details and access** <https://blinkhub.net/en/korean-news-api>
+**Base URL** `https://wire.blinkhub.net` · **MCP** `https://wire.blinkhub.net/mcp`
+· **Auth** `X-Api-Key` header · **Free tier** 100 full articles a month
+· **Docs** <https://blinkhub.net/en/korean-news-api>
 
 ```bash
 curl -H "X-Api-Key: $BLINK_WIRE_KEY" \
-  "https://wire.blinkhub.net/api/wire/v1/articles?limit=20"
+  "https://wire.blinkhub.net/api/wire/v1/articles?market=gb&limit=20"
 ```
 
 ## What is in it
 
-| Feed | `market` | Status | What it is |
-|---|---|---|---|
-| United States | `us` | **Live** | Over 4,000 government releases cleared for distribution — NASA, the White House, federal departments, state governors, city offices. Growing daily. |
-| Korea | — | **By arrangement** | Announcements from roughly 240 Korean public bodies. Not open self-serve: the Korean side runs under distribution contracts, so we check the rights for your intended use before enabling it on your key. |
+| Feed | `market` | Language | What it is | Source licence |
+|---|---|---|---|---|
+| United States | `us` | en | Edited releases from federal agencies (NASA, the White House, federal departments) and some state and city offices | Federal works are public domain; credit the agency |
+| Korea | `kr` | ko | Korean-language releases from Korean central and local government bodies, roughly 1,600–2,500 per weekday. Only recent days are online. | Credit the issuing body |
+| United Kingdom | `gb` | en | GOV.UK press releases, rewritten as news copy | Open Government Licence v3.0 |
+| European Union | `eu` | en | European Commission press releases, rewritten as news copy | CC BY 4.0 |
+| New Zealand | `nz` | en | New Zealand Government releases, rewritten as news copy | CC BY 4.0 |
+| Australia | `au` | en | Prime Minister of Australia media releases, rewritten as news copy | CC BY 4.0 (excludes the Coat of Arms and photos) |
 
-## Endpoints
+Every document carries the attribution line it needs in `copyrightnotice`. Sources whose
+terms do not allow commercial redistribution are left out of the feed.
+
+## Getting a key
+
+1. Create a free account at <https://blinkhub.net/en/publishers/join>.
+2. In the portal, open **Wire**, add your site and verify it (a meta tag or a text file).
+3. Copy your key. It is shown once; you can rotate it from the same screen.
+
+The free tier covers 100 full articles a month. For more, or for help connecting a CMS, ask
+from the portal or write to **contact@blinkhub.net**.
+
+## Use it from an AI assistant (MCP)
+
+The MCP server speaks Streamable HTTP at `https://wire.blinkhub.net/mcp` and takes your key in
+the `X-Api-Key` header (or `Authorization: Bearer <key>`).
+
+**Claude Code**
+
+```bash
+claude mcp add --transport http blinkhub-wire https://wire.blinkhub.net/mcp \
+  --header "X-Api-Key: $BLINK_WIRE_KEY"
+```
+
+**Any client that reads an `mcpServers` config**
+
+```json
+{
+  "mcpServers": {
+    "blinkhub-wire": {
+      "type": "http",
+      "url": "https://wire.blinkhub.net/mcp",
+      "headers": { "X-Api-Key": "YOUR_KEY" }
+    }
+  }
+}
+```
+
+Then ask in plain language — *"Find this week's UK government announcements on energy and
+summarise the top one, with the attribution line."*
+
+| Tool | Uses quota | What it does |
+|---|---|---|
+| `list_markets` | no | The six markets, their language, content and licence |
+| `search_articles` | no | Keyword search over recent articles in one market (headline, summary, source agency, time, id) |
+| `get_article` | 1 article, first time only | Full text, source agency, original link and the attribution line |
+| `account_status` | no | Your plan, monthly quota and usage |
+
+Search Korean articles with Korean keywords (for example `반도체`, `수출`).
+
+Also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io) as
+`net.blinkhub/wire`.
+
+## REST endpoints
 
 | | Billed | |
 |---|---|---|
 | `GET /api/wire/v1/health` | — | Liveness. No key needed. |
-| `GET /api/wire/v1/me` | free | Your account, per-article rate, remaining balance. |
+| `GET /api/wire/v1/me` | free | Your account, plan, quota and usage. |
 | `GET /api/wire/v1/articles` | **free** | What is available. Headlines and metadata, no body. |
 | `GET /api/wire/v1/articles/{id}` | **per article** | The full ninjs document. |
+| `POST /api/wire/v1/publications` | free | Optional: tell us where you published a story you took. |
+| `GET /api/wire/v1/publications` | free | Your reported publications. |
 
 ### Listing
 
-`GET /api/wire/v1/articles?market=us&limit=20&since=2026-09-01T00:00:00`
+`GET /api/wire/v1/articles?market=gb&limit=20&since=2026-10-01T00:00:00Z`
 
-`limit` is 1–100 (default 20). `since` filters on `received_at`, so a scheduled job can ask
-only for what appeared after its last run.
+`market` defaults to `us`. `limit` is 1–100 (default 20). `since` returns only what appeared
+after that time, so a scheduled job can ask for what is new since its last run.
 
 ```json
 {
@@ -60,63 +121,53 @@ fetching it again is free.
 
 ### Fetching one
 
-`GET /api/wire/v1/articles/{id}?market=us&lang=en`
+`GET /api/wire/v1/articles/{id}?market=us`
 
-Returns a ninjs 2.1 document, plus two response headers:
-
-```
-X-Wire-Credits-Charged: 1
-X-Wire-Credits-Balance: 415
-```
-
-Bodies are cleaned of site furniture before they reach you (newsletter prompts, share rows,
-duplicated blocks) and image URLs are rewritten to public addresses, so nothing arrives
-pointing at an internal host. Non-standard fields are kept under `x_blink` so a standards
-compliant consumer can ignore them.
+Returns a ninjs 2.1 document. Bodies are cleaned of site furniture (newsletter prompts, share
+rows, duplicated blocks) and image URLs point at public addresses. Non-standard fields are kept
+under `x_blink` so a standards-compliant consumer can ignore them. Korean articles embargoed
+by the issuing body stay hidden until the embargo time.
 
 ## Billing
 
-- **Listing is free.** You should be able to see what exists before paying for any of it.
-- **A full fetch is charged once.** The first time this key takes a given article.
-- **Re-fetching is free.** After a crash, during a re-index, from a second system — no second charge.
-- **Nothing is charged for an article we refuse to serve.** The quality gate runs before billing.
-- No subscription and no minimum term. Rate depends on volume and intended use; ask.
+- **Listing and searching are free.** See what exists before you take any of it.
+- **A full fetch counts once** — the first time this key takes a given article.
+- **Re-fetching is free.** After a crash, during a re-index, from a second system.
+- **Nothing is counted for an article we refuse to serve.** The quality gate runs first.
 
 ## Errors
 
 All errors share one shape:
 
 ```json
-{ "error": { "code": "insufficient_credits", "message": "..." } }
+{ "error": { "code": "quota_exceeded", "message": "..." } }
 ```
 
 | HTTP | `code` | |
 |---|---|---|
 | 401 | `unauthorized` | Missing, unknown or suspended key. |
-| 400 | `unknown_market` | That `market` is not enabled for you. |
-| 402 | `insufficient_credits` | Balance is below the per-article rate. |
-| 404 | `not_found` | No such article, or it is not cleared for distribution. |
-| 409 | `not_distributable` | Failed the quality gate. **Not billed.** |
+| 400 | `unknown_market` | Unknown `market`. |
+| 402 | `quota_exceeded` | Free tier: this month's quota is used up. |
+| 402 | `insufficient_credits` | Paid tier: balance is below the per-article rate. |
+| 404 | `not_found` | No such article, or it is not available for distribution. |
+| 409 | `not_distributable` | Failed the quality gate. **Not counted.** |
 | 500 | `internal_error` | Transient. Retry. |
+
+## WordPress
+
+The [BlinkHub Wire Importer](https://wordpress.org/plugins/blinkhub-wire-importer/) plugin
+imports articles into WordPress on a schedule and reports publications back automatically.
 
 ## Examples
 
 - [`examples/fetch.py`](examples/fetch.py) — Python, standard library only
 - [`examples/fetch.mjs`](examples/fetch.mjs) — Node 18+, no dependencies
-- [`openapi.yaml`](openapi.yaml) — OpenAPI 3.1 description of the whole API
+- [`openapi.yaml`](openapi.yaml) — OpenAPI 3.1 description of the REST API
 
-Both examples do the same thing: list what is new since a timestamp, then fetch only the
-articles this key has not taken before.
-
-## Getting a key
-
-Email **contact@blinkhub.net** with your organisation, what you publish and which feed you
-want. There is no self-serve signup yet — keys are issued per organisation.
-
-Full write-up: <https://blinkhub.net/en/korean-news-api>
+Both examples list what is new since a timestamp, then fetch only the articles this key has
+not taken before. Pass `--market gb` (or any market code) to read another feed.
 
 ## Licence
 
-The code in this repository is MIT (see [LICENSE](LICENSE)). The articles the API serves are
-not — they are licensed to you under your own agreement, and the `usageterms` field on every
-document states the terms that apply.
+The code in this repository is MIT (see [LICENSE](LICENSE)). The articles are not: each
+document's `copyrightnotice` and `usageterms` fields state the terms that apply.
